@@ -193,6 +193,10 @@ func (m *Multi) PutPart(n int, r io.ReadSeeker) (Part, error) {
 	return m.putPart(n, r, partSize, md5b64)
 }
 
+func (m *Multi) PutPartCloser(n int, partSize int64, md5b64 string, r io.ReadCloser) (Part, error) {
+	return m.putPartCloser(n, r, partSize, md5b64)
+}
+
 func (m *Multi) putPart(n int, r io.ReadSeeker, partSize int64, md5b64 string) (Part, error) {
 	headers := map[string][]string{
 		"Content-Length": {strconv.FormatInt(partSize, 10)},
@@ -216,6 +220,44 @@ func (m *Multi) putPart(n int, r io.ReadSeeker, partSize int64, md5b64 string) (
 			payload: r,
 		}
 		err = m.Bucket.S3.prepare(req)
+		if err != nil {
+			return Part{}, err
+		}
+		resp, err := m.Bucket.S3.run(req, nil)
+		if shouldRetry(err) && attempt.HasNext() {
+			continue
+		}
+		if err != nil {
+			return Part{}, err
+		}
+		etag := resp.Header.Get("ETag")
+		if etag == "" {
+			return Part{}, errors.New("part upload succeeded with no ETag")
+		}
+		return Part{n, etag, partSize}, nil
+	}
+	panic("unreachable")
+}
+
+func (m *Multi) putPartCloser(n int, r io.ReadCloser, partSize int64, md5b64 string) (Part, error) {
+	headers := map[string][]string{
+		"Content-Length": {strconv.FormatInt(partSize, 10)},
+		"Content-MD5":    {md5b64},
+	}
+	params := map[string][]string{
+		"uploadId":   {m.UploadId},
+		"partNumber": {strconv.FormatInt(int64(n), 10)},
+	}
+	for attempt := attempts.Start(); attempt.Next(); {
+		req := &request{
+			method:  "PUT",
+			bucket:  m.Bucket.Name,
+			path:    m.Key,
+			headers: headers,
+			params:  params,
+			payload: r,
+		}
+		err := m.Bucket.S3.prepare(req)
 		if err != nil {
 			return Part{}, err
 		}

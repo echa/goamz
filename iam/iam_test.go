@@ -1,9 +1,9 @@
 package iam_test
 
 import (
-	"github.com/AdRoll/goamz/aws"
-	"github.com/AdRoll/goamz/iam"
-	"github.com/AdRoll/goamz/testutil"
+	"github.com/echa/goamz/aws"
+	"github.com/echa/goamz/iam"
+	"github.com/echa/goamz/testutil"
 	"gopkg.in/check.v1"
 	"strings"
 	"testing"
